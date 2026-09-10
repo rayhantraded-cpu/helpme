@@ -36,13 +36,20 @@ def main(page: ft.Page):
     page.padding = 0 
     page.spacing = 0
 
-    # --- استرجاع البيانات من ذاكرة الهاتف ---
-    user_stats = page.client_storage.get("user_stats") or {"streak": 1, "points": 0}
-    tasks_db = page.client_storage.get("tasks_db") or []
+    # --- استرجاع البيانات بأمان تام ---
+    try:
+        user_stats = page.client_storage.get("user_stats") or {"streak": 1, "points": 0}
+        tasks_db = page.client_storage.get("tasks_db") or []
+    except Exception:
+        user_stats = {"streak": 1, "points": 0}
+        tasks_db = []
 
     def save_data():
-        page.client_storage.set("user_stats", user_stats)
-        page.client_storage.set("tasks_db", tasks_db)
+        try:
+            page.client_storage.set("user_stats", user_stats)
+            page.client_storage.set("tasks_db", tasks_db)
+        except Exception as e:
+            print(f"Error saving data: {e}")
 
     current_context = {"category": "", "period": "يومية"}
 
@@ -72,7 +79,8 @@ def main(page: ft.Page):
     )
 
     # --- الدرج الجانبي لتأكيد المهام ---
-    achievements_list = ft.ListView(expand=True, spacing=10)
+    # تم تغيير ListView إلى Column لحل مشكلة التمدد اللا نهائي
+    achievements_list = ft.Column(spacing=10)
 
     def toggle_task_completion(e):
         cb = e.control
@@ -117,7 +125,9 @@ def main(page: ft.Page):
     )
 
     # --- إضافة مهمة جديدة مع زر اللصق ---
-    task_title_input = ft.TextField(label="نص المهمة", hint_text="أدخل تفاصيل المهمة...", expand=True)
+    # تم إزالة expand=True من هنا لحل الانهيار
+    task_title_input = ft.TextField(label="نص المهمة", hint_text="أدخل تفاصيل المهمة...")
+    # expand=True مسموح به هنا لأنه بداخل Row أفقي
     task_link_input = ft.TextField(label="الرابط (اختياري)", hint_text="https://...", expand=True)
     
     def paste_from_clipboard(e):
@@ -238,7 +248,8 @@ def main(page: ft.Page):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(),
                 ft.Container(content=reports_content, expand=True),
-                ft.ElevatedButton("نسخ التقرير للمشاركة 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, expand=True, on_click=export_text_report),
+                # تم تغيير expand=True إلى width=page.width لحل التعارض الهندسي
+                ft.ElevatedButton("نسخ التقرير للمشاركة 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, width=page.width, on_click=export_text_report),
             ]), padding=20, height=550, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
         ), dismissible=True,
     )
