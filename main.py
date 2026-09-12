@@ -36,10 +36,15 @@ def main(page: ft.Page):
     page.padding = 0 
     page.spacing = 0
 
-    # --- استرجاع البيانات بأمان تام ---
+    # --- استرجاع البيانات بأمان تام (معالجة الشاشة البيضاء الأولى) ---
     try:
-        user_stats = page.client_storage.get("user_stats") or {"streak": 1, "points": 0}
-        tasks_db = page.client_storage.get("tasks_db") or []
+        user_stats = page.client_storage.get("user_stats")
+        if not user_stats:
+            user_stats = {"streak": 1, "points": 0}
+            
+        tasks_db = page.client_storage.get("tasks_db")
+        if not tasks_db:
+            tasks_db = []
     except Exception:
         user_stats = {"streak": 1, "points": 0}
         tasks_db = []
@@ -49,7 +54,7 @@ def main(page: ft.Page):
             page.client_storage.set("user_stats", user_stats)
             page.client_storage.set("tasks_db", tasks_db)
         except Exception as e:
-            print(f"Error saving data: {e}")
+            pass # تجاهل الأخطاء الصامتة في التخزين إن وجدت
 
     current_context = {"category": "", "period": "يومية"}
 
@@ -79,7 +84,6 @@ def main(page: ft.Page):
     )
 
     # --- الدرج الجانبي لتأكيد المهام ---
-    # تم تغيير ListView إلى Column لحل مشكلة التمدد اللا نهائي
     achievements_list = ft.Column(spacing=10)
 
     def toggle_task_completion(e):
@@ -107,7 +111,7 @@ def main(page: ft.Page):
                 cb = ft.Checkbox(
                     label=f"{task['title']}",
                     value=task.get("completed", False), 
-                    data=task["id"], 
+                    data=task.get("id", ""), 
                     on_change=toggle_task_completion
                 )
                 achievements_list.controls.append(ft.Container(content=cb, padding=5, bgcolor=ft.colors.BLUE_50, border_radius=5))
@@ -118,16 +122,16 @@ def main(page: ft.Page):
             ft.Container(
                 content=ft.Column([
                     ft.Text("🏆 قائمة إنجازات المهام", size=18, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900),
-                    ft.Divider(), achievements_list
-                ]), padding=15,
+                    ft.Divider(), 
+                    ft.Column([achievements_list], scroll=ft.ScrollMode.AUTO, expand=True)
+                ], expand=True), 
+                padding=15, expand=True
             )
         ]
     )
 
     # --- إضافة مهمة جديدة مع زر اللصق ---
-    # تم إزالة expand=True من هنا لحل الانهيار
     task_title_input = ft.TextField(label="نص المهمة", hint_text="أدخل تفاصيل المهمة...")
-    # expand=True مسموح به هنا لأنه بداخل Row أفقي
     task_link_input = ft.TextField(label="الرابط (اختياري)", hint_text="https://...", expand=True)
     
     def paste_from_clipboard(e):
@@ -137,7 +141,6 @@ def main(page: ft.Page):
             page.update()
             
     paste_btn = ft.IconButton(icon=ft.icons.CONTENT_PASTE, tooltip="لصق من الحافظة", on_click=paste_from_clipboard, icon_color=ft.colors.BLUE_700)
-    
     task_period_dropdown = ft.Dropdown(label="تكرار المهمة", value="يومية", options=[ft.dropdown.Option("يومية"), ft.dropdown.Option("أسبوعية"), ft.dropdown.Option("شهرية")])
 
     def save_new_task(e):
@@ -237,7 +240,7 @@ def main(page: ft.Page):
             report += f"- {t['title']} ({status})\n"
         
         page.set_clipboard(report)
-        page.show_snack_bar(ft.SnackBar(content=ft.Text("تم نسخ التقرير! يمكنك لصقه في واتساب أو أي مكان."), open=True))
+        page.show_snack_bar(ft.SnackBar(content=ft.Text("تم نسخ التقرير بنجاح! يمكنك لصقه الآن."), open=True))
 
     reports_sheet = ft.BottomSheet(
         content=ft.Container(
@@ -248,7 +251,6 @@ def main(page: ft.Page):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(),
                 ft.Container(content=reports_content, expand=True),
-                # تم تغيير expand=True إلى width=page.width لحل التعارض الهندسي
                 ft.ElevatedButton("نسخ التقرير للمشاركة 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, width=page.width, on_click=export_text_report),
             ]), padding=20, height=550, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
         ), dismissible=True,
@@ -306,9 +308,13 @@ def main(page: ft.Page):
         padding=10, bgcolor=ft.colors.WHITE
     )
 
-    # حاوية رئيسية بتدرج لوني أزرق فاتح
+    # حاوية رئيسية بتدرج لوني أزرق فاتح مع حل التعارض الهندسي
     main_layout = ft.Container(
-        content=ft.Column([motivation_header, tabs, bottom_navigation_bar], spacing=0),
+        content=ft.Column(
+            [motivation_header, tabs, bottom_navigation_bar], 
+            spacing=0, 
+            expand=True  # هذا هو السطر الذي أصلح مشكلة الشاشة البيضاء
+        ),
         expand=True,
         gradient=ft.LinearGradient(
             begin=ft.alignment.top_center,
