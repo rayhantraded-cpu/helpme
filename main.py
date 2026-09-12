@@ -36,7 +36,7 @@ def main(page: ft.Page):
     page.padding = 0 
     page.spacing = 0
 
-    # --- استرجاع البيانات بأمان تام (معالجة الشاشة البيضاء الأولى) ---
+    # --- استرجاع البيانات بأمان تام ---
     try:
         user_stats = page.client_storage.get("user_stats")
         if not user_stats:
@@ -53,8 +53,8 @@ def main(page: ft.Page):
         try:
             page.client_storage.set("user_stats", user_stats)
             page.client_storage.set("tasks_db", tasks_db)
-        except Exception as e:
-            pass # تجاهل الأخطاء الصامتة في التخزين إن وجدت
+        except Exception:
+            pass 
 
     current_context = {"category": "", "period": "يومية"}
 
@@ -80,7 +80,8 @@ def main(page: ft.Page):
             ft.Row([ft.Icon(ft.icons.LIGHTBULB_OUTLINE, color=ft.colors.AMBER_700, size=18), banner_tip]),
         ]),
         bgcolor=ft.colors.WHITE70, padding=15, border_radius=ft.border_radius.only(bottom_left=20, bottom_right=20),
-        border=ft.border.only(bottom=ft.border.BorderSide(2, ft.colors.BLUE_100))
+        # تم إصلاح الخطأ البرمجي هنا ft.BorderSide بدلاً من ft.border.BorderSide
+        border=ft.border.only(bottom=ft.BorderSide(2, ft.colors.BLUE_100))
     )
 
     # --- الدرج الجانبي لتأكيد المهام ---
@@ -94,7 +95,7 @@ def main(page: ft.Page):
                 t["completed"] = cb.value
                 if cb.value:
                     user_stats["points"] += 10
-                    page.show_snack_bar(ft.SnackBar(content=ft.Text("🎉 ممتاز! كسبت +10 نقاط."), open=True))
+                    page.open(ft.SnackBar(content=ft.Text("🎉 ممتاز! كسبت +10 نقاط.")))
                 else:
                     user_stats["points"] = max(0, user_stats["points"] - 10)
                 break
@@ -135,10 +136,13 @@ def main(page: ft.Page):
     task_link_input = ft.TextField(label="الرابط (اختياري)", hint_text="https://...", expand=True)
     
     def paste_from_clipboard(e):
-        clipboard_content = page.get_clipboard()
-        if clipboard_content:
-            task_link_input.value = clipboard_content
-            page.update()
+        try:
+            clipboard_content = page.get_clipboard()
+            if clipboard_content:
+                task_link_input.value = clipboard_content
+                page.update()
+        except Exception:
+            pass # منع انهيار التطبيق إذا كانت الحافظة غير مدعومة
             
     paste_btn = ft.IconButton(icon=ft.icons.CONTENT_PASTE, tooltip="لصق من الحافظة", on_click=paste_from_clipboard, icon_color=ft.colors.BLUE_700)
     task_period_dropdown = ft.Dropdown(label="تكرار المهمة", value="يومية", options=[ft.dropdown.Option("يومية"), ft.dropdown.Option("أسبوعية"), ft.dropdown.Option("شهرية")])
@@ -163,7 +167,8 @@ def main(page: ft.Page):
         task_link_input.value = ""
         page.close(add_task_dialog)
         refresh_category_tasks_view()
-        page.show_snack_bar(ft.SnackBar(content=ft.Text("تم حفظ المهمة بنجاح!"), open=True))
+        page.open(ft.SnackBar(content=ft.Text("تم حفظ المهمة بنجاح!")))
+        page.update()
 
     add_task_dialog = ft.AlertDialog(
         title=ft.Text("إضافة مهمة جديدة", color=ft.colors.BLUE_900),
@@ -194,7 +199,10 @@ def main(page: ft.Page):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(),
                 ft.Container(content=category_tasks_list, expand=True), 
-                ft.ElevatedButton("إضافة مهمة جديدة (+)", icon=ft.icons.ADD, width=page.width, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=open_add_dialog),
+                # تم حل مشكلة page.width هنا بوضع الزر داخل Row مع expand
+                ft.Row([
+                    ft.ElevatedButton("إضافة مهمة جديدة (+)", icon=ft.icons.ADD, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=open_add_dialog, expand=True)
+                ])
             ]), padding=20, height=550, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
         ), dismissible=True,
     )
@@ -240,7 +248,8 @@ def main(page: ft.Page):
             report += f"- {t['title']} ({status})\n"
         
         page.set_clipboard(report)
-        page.show_snack_bar(ft.SnackBar(content=ft.Text("تم نسخ التقرير بنجاح! يمكنك لصقه الآن."), open=True))
+        page.open(ft.SnackBar(content=ft.Text("تم نسخ التقرير بنجاح! يمكنك لصقه الآن.")))
+        page.update()
 
     reports_sheet = ft.BottomSheet(
         content=ft.Container(
@@ -251,7 +260,10 @@ def main(page: ft.Page):
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(),
                 ft.Container(content=reports_content, expand=True),
-                ft.ElevatedButton("نسخ التقرير للمشاركة 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, width=page.width, on_click=export_text_report),
+                # تم حل مشكلة page.width هنا بوضع الزر داخل Row مع expand
+                ft.Row([
+                    ft.ElevatedButton("نسخ التقرير للمشاركة 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=export_text_report, expand=True)
+                ])
             ]), padding=20, height=550, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
         ), dismissible=True,
     )
@@ -308,12 +320,12 @@ def main(page: ft.Page):
         padding=10, bgcolor=ft.colors.WHITE
     )
 
-    # حاوية رئيسية بتدرج لوني أزرق فاتح مع حل التعارض الهندسي
+    # حاوية رئيسية بتدرج لوني أزرق فاتح
     main_layout = ft.Container(
         content=ft.Column(
             [motivation_header, tabs, bottom_navigation_bar], 
             spacing=0, 
-            expand=True  # هذا هو السطر الذي أصلح مشكلة الشاشة البيضاء
+            expand=True
         ),
         expand=True,
         gradient=ft.LinearGradient(
