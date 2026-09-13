@@ -1,37 +1,25 @@
 import os
 import sqlite3
-import tempfile
+import traceback
 from pathlib import Path
+import flet as ft
 
+# ==========================================
+# 1. إعدادات قاعدة البيانات (النسخة الآمنة لأندرويد)
+# ==========================================
 APP_DIR_NAME = "personal_productivity_app"
 DB_FILE_NAME = "personal_assistant.db"
 
 def get_storage_path() -> Path:
-    # قائمة بالمسارات الممكنة، يتم اختبارها تدريجياً لتجاوز حماية أندرويد
-    paths_to_try = [
-        os.environ.get("FLET_APP_STORAGE_DATA"), 
-        Path(__file__).parent / "database",      
-        Path(os.getcwd()) / "database",          
-        Path.home() / f".{APP_DIR_NAME}",        
-        Path(tempfile.gettempdir()) / APP_DIR_NAME 
-    ]
-
-    for p in paths_to_try:
-        if not p:
-            continue
-        try:
-            path_obj = Path(p)
-            path_obj.mkdir(parents=True, exist_ok=True)
-            # اختبار صلاحية الكتابة الفعليه بصمت
-            test_file = path_obj / "test_write.tmp"
-            test_file.touch()
-            test_file.unlink()
-            return path_obj # اعتماد المسار عند نجاح الاختبار
-        except Exception:
-            continue 
-            
-    # خط الدفاع الأخير لمنع انهيار التطبيق
-    return Path(tempfile.gettempdir())
+    # الدرع الواقي: في أندرويد المجلد الحالي هو المساحة الوحيدة المسموحة للكتابة
+    cwd = Path(os.getcwd())
+    app_dir = cwd / APP_DIR_NAME
+    try:
+        app_dir.mkdir(parents=True, exist_ok=True)
+        return app_dir
+    except Exception:
+        # إذا رفض النظام إنشاء مجلد فرعي، نستخدم المجلد الجذري للتطبيق مباشرة
+        return cwd
 
 DB_NAME = str(get_storage_path() / DB_FILE_NAME)
 
@@ -39,7 +27,7 @@ def connect_db():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    # استخدام DELETE لضمان الاستقرار التام في أندرويد
+    # تم تغيير WAL إلى DELETE لضمان استقرار أندرويد ومنع تجميد الملفات
     conn.execute("PRAGMA journal_mode = DELETE")
     return conn
 
@@ -150,36 +138,53 @@ def init_db():
                 (key, value),
             )
 
-def get_state(key: str, default: str = "") -> str:
-    with connect_db() as conn:
-        row = conn.execute(
-            "SELECT value FROM app_state WHERE key = ?", (key,)
-        ).fetchone()
-        return row["value"] if row else default
+# ==========================================
+# 2. واجهة التطبيق وصائد الأخطاء
+# ==========================================
+def main(page: ft.Page):
+    page.title = "المساعد الشخصي"
+    page.rtl = True
+    page.scroll = ft.ScrollMode.AUTO
+    page.padding = 20
 
-def set_state(key: str, value) -> None:
-    with connect_db() as conn:
-        conn.execute(
-            """
-            INSERT INTO app_state(key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            """,
-            (key, str(value)),
+    # عنوان ترحيبي
+    page.add(
+        ft.Text("مرحباً أحمد! نظام كشف الأخطاء يعمل 🔍", size=18, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900)
+    )
+
+    try:
+        # هنا السحر: نقوم بتشغيل قاعدة البيانات "بعد" أن تفتح الشاشة وليس قبلها!
+        init_db()
+        
+        # إذا نجح السطر السابق، ستظهر هذه الرسالة الخضراء
+        page.add(
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("✅ قاعدة البيانات (SQLite) تعمل بنجاح تام!", color=ft.colors.GREEN_800, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"تم حفظ الملف في المسار التالي:\n{DB_NAME}", size=12, color=ft.colors.BLUE_700, selectable=True)
+                ]),
+                bgcolor=ft.colors.GREEN_50,
+                padding=15,
+                border_radius=10
+            )
+        )
+        
+    except Exception as e:
+        # إذا حدث أي خطأ برمجياً أو في الصلاحيات، لن ينهار التطبيق! بل سيكتب لك الخطأ على الشاشة لتقرأه
+        error_details = traceback.format_exc()
+        page.add(
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("❌ حدث خطأ منع تشغيل قاعدة البيانات:", color=ft.colors.RED_800, weight=ft.FontWeight.BOLD),
+                    ft.Text(error_details, size=11, color=ft.colors.RED_900, selectable=True)
+                ]),
+                bgcolor=ft.colors.RED_50,
+                padding=15,
+                border_radius=10
+            )
         )
 
-def get_all_state() -> dict:
-    with connect_db() as conn:
-        rows = conn.execute("SELECT key, value FROM app_state").fetchall()
-        return {row["key"]: row["value"] for row in rows}
+    page.update()
 
-def export_database(destination: str) -> None:
-    destination_path = Path(destination)
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
-    source = connect_db()
-    try:
-        target = sqlite3.connect(str(destination_path))
-        with target:
-            source.backup(target)
-        target.close()
-    finally:
-        source.close()
+if __name__ == "__main__":
+    ft.app(target=main)
