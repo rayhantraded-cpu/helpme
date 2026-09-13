@@ -1,36 +1,45 @@
 import os
 import sqlite3
+import tempfile
 from pathlib import Path
 
 APP_DIR_NAME = "personal_productivity_app"
 DB_FILE_NAME = "personal_assistant.db"
 
 def get_storage_path() -> Path:
-    base_dir = os.environ.get("FLET_APP_STORAGE_DATA")
-    if base_dir:
-        path = Path(base_dir)
-    else:
+    # قائمة بالمسارات الممكنة، يتم اختبارها تدريجياً لتجاوز حماية أندرويد
+    paths_to_try = [
+        os.environ.get("FLET_APP_STORAGE_DATA"), 
+        Path(__file__).parent / "database",      
+        Path(os.getcwd()) / "database",          
+        Path.home() / f".{APP_DIR_NAME}",        
+        Path(tempfile.gettempdir()) / APP_DIR_NAME 
+    ]
+
+    for p in paths_to_try:
+        if not p:
+            continue
         try:
-            # 1. محاولة استخدام المسار القياسي (يعمل بنجاح على الويندوز والكمبيوتر)
-            path = Path.home() / f".{APP_DIR_NAME}"
-            path.mkdir(parents=True, exist_ok=True)
-        except PermissionError:
-            # 2. الحل الجذري لأندرويد: التوجيه إلى مجلد التطبيق المفتوح للصلاحيات
-            path = Path(__file__).parent / "database"
-            path.mkdir(parents=True, exist_ok=True)
+            path_obj = Path(p)
+            path_obj.mkdir(parents=True, exist_ok=True)
+            # اختبار صلاحية الكتابة الفعليه بصمت
+            test_file = path_obj / "test_write.tmp"
+            test_file.touch()
+            test_file.unlink()
+            return path_obj # اعتماد المسار عند نجاح الاختبار
         except Exception:
-            # 3. خط دفاع أخير
-            path = Path(os.getcwd()) / "database"
-            path.mkdir(parents=True, exist_ok=True)
+            continue 
             
-    return path
+    # خط الدفاع الأخير لمنع انهيار التطبيق
+    return Path(tempfile.gettempdir())
+
 DB_NAME = str(get_storage_path() / DB_FILE_NAME)
 
 def connect_db():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    # تم تغيير وضع WAL إلى DELETE لضمان التوافق مع أنظمة ملفات أندرويد
+    # استخدام DELETE لضمان الاستقرار التام في أندرويد
     conn.execute("PRAGMA journal_mode = DELETE")
     return conn
 
@@ -164,8 +173,6 @@ def get_all_state() -> dict:
         return {row["key"]: row["value"] for row in rows}
 
 def export_database(destination: str) -> None:
-    # ملاحظة: لتجنب خطأ PermissionError في أندرويد، يجب التأكد من أن 
-    # المتغير destination يمثل مساراً مصرحاً به (مثل مسار تم اختياره عبر FilePicker)
     destination_path = Path(destination)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     source = connect_db()
