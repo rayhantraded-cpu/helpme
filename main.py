@@ -1,275 +1,174 @@
-import datetime
-import random
-import flet as ft
+import os
+import sqlite3
+from pathlib import Path
 
-MORNING_MESSAGES = ["🌅 بركة يومك في بكورك! ابدأ بمهمة واحدة بسيطة الآن.", "☀️ صباح الهمة! انطلاقة جديدة ليوم مليء بالإنجاز."]
-AFTERNOON_MESSAGES = ["🌤️ جاء وقت العصر! خطوة صغيرة إضافية تصنع الفارق.", "☕ حان وقت الاستراحة وشحن الطاقة."]
-EVENING_MESSAGES = ["🌙 هدوء المساء فرصة للراحة.", "✨ أنجزت ما باستطاعتك اليوم، غداً يوم أفضل."]
+APP_DIR_NAME = "personal_productivity_app"
+DB_FILE_NAME = "personal_assistant.db"
 
-categories = [
-    ("🕊️ مهام روحية", ft.colors.PURPLE_50, ft.colors.PURPLE_900),
-    ("💪 مهام بدنية وصحية", ft.colors.GREEN_50, ft.colors.GREEN_900),
-    ("🚀 مهام تطويرية", ft.colors.BLUE_50, ft.colors.BLUE_900),
-    ("📚 مهام تعليمية", ft.colors.ORANGE_50, ft.colors.ORANGE_900),
-    ("🤝 مهام اجتماعية", ft.colors.TEAL_50, ft.colors.TEAL_900),
-    ("💰 مهام اقتصادية", ft.colors.AMBER_50, ft.colors.AMBER_900),
-]
-
-def main(page: ft.Page):
-    page.title = "المساعد الشخصي"
-    page.rtl = True
-    page.theme_mode = ft.ThemeMode.LIGHT
-    
-    # استخدام لون خلفية آمن جداً بدلاً من الحاويات المتمددة التي تسبب تعارض
-    page.bgcolor = ft.colors.BLUE_50 
-    page.padding = 0 
-    page.spacing = 0
-
-    # --- استرجاع البيانات بأمان تام ---
-    try:
-        user_stats = page.client_storage.get("user_stats") or {"streak": 1, "points": 0}
-        tasks_db = page.client_storage.get("tasks_db") or []
-    except:
-        user_stats = {"streak": 1, "points": 0}
-        tasks_db = []
-
-    def save_data():
+def get_storage_path() -> Path:
+    base_dir = os.environ.get("FLET_APP_STORAGE_DATA")
+    if base_dir:
+        path = Path(base_dir)
+    else:
+        # استخدام try-except لتجنب خطأ RuntimeError في أندرويد
         try:
-            page.client_storage.set("user_stats", user_stats)
-            page.client_storage.set("tasks_db", tasks_db)
-        except:
-            pass
-
-    current_context = {"category": "", "period": "يومية"}
-
-    # --- الهيدر التحفيزي ---
-    streak_text = ft.Text(f"{user_stats['streak']} أيام", weight=ft.FontWeight.BOLD, size=12)
-    points_text = ft.Text(f"{user_stats['points']} نقطة", weight=ft.FontWeight.BOLD, size=12)
-
-    def get_time_based_message():
-        h = datetime.datetime.now().hour
-        if 4 <= h < 11: return random.choice(MORNING_MESSAGES)
-        elif 14 <= h < 18: return random.choice(AFTERNOON_MESSAGES)
-        else: return random.choice(EVENING_MESSAGES)
-
-    banner_tip = ft.Text(get_time_based_message(), size=12, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900, expand=True)
-
-    motivation_header = ft.Container(
-        content=ft.Column([
-            ft.Row([
-                ft.IconButton(icon=ft.icons.MENU, on_click=lambda e: (update_drawer_achievements(), page.open(drawer))),
-                ft.Container(content=ft.Row([ft.Icon(ft.icons.LOCAL_FIRE_DEPARTMENT, color=ft.colors.ORANGE, size=18), streak_text]), bgcolor=ft.colors.ORANGE_50, padding=5, border_radius=15),
-                ft.Container(content=ft.Row([ft.Icon(ft.icons.STAR, color=ft.colors.AMBER_800, size=18), points_text]), bgcolor=ft.colors.AMBER_50, padding=5, border_radius=15),
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Row([ft.Icon(ft.icons.LIGHTBULB_OUTLINE, color=ft.colors.AMBER_700, size=18), banner_tip]),
-        ]),
-        bgcolor=ft.colors.WHITE, padding=15, 
-        border_radius=ft.border_radius.only(bottom_left=20, bottom_right=20),
-        border=ft.border.only(bottom=ft.BorderSide(2, ft.colors.BLUE_100))
-    )
-
-    # --- الدرج الجانبي (تم إزالة التمدد العشوائي لمنع الشاشة البيضاء) ---
-    achievements_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
-
-    def toggle_task_completion(e):
-        cb = e.control
-        for t in tasks_db:
-            if t["id"] == cb.data:
-                t["completed"] = cb.value
-                if cb.value:
-                    user_stats["points"] += 10
-                    page.open(ft.SnackBar(content=ft.Text("🎉 ممتاز! كسبت +10 نقاط.")))
-                else:
-                    user_stats["points"] = max(0, user_stats["points"] - 10)
-                break
-        points_text.value = f"{user_stats['points']} نقطة"
-        save_data()
-        page.update()
-
-    def update_drawer_achievements():
-        achievements_list.controls.clear()
-        if not tasks_db:
-            achievements_list.controls.append(ft.Text("لا توجد مهام.", color=ft.colors.GREY_600))
-        for task in tasks_db:
-            cb = ft.Checkbox(label=f"{task['title']}", value=task.get("completed", False), data=task.get("id", ""), on_change=toggle_task_completion)
-            achievements_list.controls.append(ft.Container(content=cb, padding=5, bgcolor=ft.colors.BLUE_50, border_radius=5))
-        page.update()
-
-    drawer = ft.NavigationDrawer(
-        controls=[
-            ft.Container(
-                content=ft.Column([
-                    ft.Text("🏆 إنجازات المهام", size=18, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900),
-                    ft.Divider(), 
-                    achievements_list
-                ]), 
-                padding=15
-            )
-        ]
-    )
-
-    # --- إضافة مهمة جديدة ---
-    task_title_input = ft.TextField(label="نص المهمة")
-    task_link_input = ft.TextField(label="الرابط (اختياري)", expand=True)
-    
-    def paste_from_clipboard(e):
-        try:
-            clip = page.get_clipboard()
-            if clip:
-                task_link_input.value = clip
-                page.update()
-        except:
-            pass
+            path = Path.home() / f".{APP_DIR_NAME}"
+        except RuntimeError:
+            # في أندرويد، المسار الحالي (cwd) هو مسار التطبيق الآمن والمصرح بالكتابة فيه
+            path = Path(os.getcwd()) / f".{APP_DIR_NAME}"
             
-    paste_btn = ft.IconButton(icon=ft.icons.CONTENT_PASTE, on_click=paste_from_clipboard, icon_color=ft.colors.BLUE_700)
-    task_period_dropdown = ft.Dropdown(label="التكرار", value="يومية", options=[ft.dropdown.Option("يومية"), ft.dropdown.Option("أسبوعية"), ft.dropdown.Option("شهرية")])
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
-    def save_new_task(e):
-        if not task_title_input.value: return
-        tasks_db.append({
-            "id": str(random.randint(10000, 99999)),
-            "title": task_title_input.value, 
-            "link": task_link_input.value,
-            "period": task_period_dropdown.value, 
-            "category": current_context["category"], 
-            "completed": False,
-        })
-        save_data()
-        task_title_input.value = ""
-        task_link_input.value = ""
-        page.close(add_task_dialog)
-        refresh_category_tasks_view()
-        page.open(ft.SnackBar(content=ft.Text("تم حفظ المهمة بنجاح!")))
+DB_NAME = str(get_storage_path() / DB_FILE_NAME)
 
-    add_task_dialog = ft.AlertDialog(
-        title=ft.Text("إضافة مهمة", color=ft.colors.BLUE_900),
-        content=ft.Column([task_title_input, ft.Row([task_link_input, paste_btn]), task_period_dropdown], tight=True, spacing=10),
-        actions=[
-            ft.TextButton("إلغاء", on_click=lambda e: page.close(add_task_dialog)),
-            ft.ElevatedButton("حفظ", on_click=save_new_task, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE),
-        ],
-    )
+def connect_db():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    # تم تغيير وضع WAL إلى DELETE لضمان التوافق مع أنظمة ملفات أندرويد
+    conn.execute("PRAGMA journal_mode = DELETE")
+    return conn
 
-    # --- استعراض المهام (تم تحديد الارتفاع بدلاً من التمدد العشوائي) ---
-    category_tasks_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, height=320) 
+def init_db():
+    with connect_db() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                icon_name TEXT NOT NULL DEFAULT 'category',
+                color_code TEXT NOT NULL DEFAULT '#607D8B'
+            );
 
-    category_sheet = ft.BottomSheet(
-        content=ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Text("المهام", size=18, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900),
-                    ft.IconButton(icon=ft.icons.CLOSE, on_click=lambda e: page.close(category_sheet)),
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Divider(),
-                category_tasks_list, 
-                ft.Row([ft.ElevatedButton("إضافة مهمة جديدة (+)", icon=ft.icons.ADD, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=lambda e: page.open(add_task_dialog), expand=True)])
-            ]), padding=20, height=520, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
-        ), dismissible=True,
-    )
+            CREATE TABLE IF NOT EXISTS task_lists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                frequency_type TEXT NOT NULL
+                    CHECK(frequency_type IN ('DAILY','WEEKLY','MONTHLY')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
 
-    def refresh_category_tasks_view():
-        category_tasks_list.controls.clear()
-        cat, per = current_context["category"], current_context["period"]
-        filtered = [t for t in tasks_db if t["category"] == cat and t["period"] == per]
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_id INTEGER NOT NULL,
+                category_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                resource_url TEXT DEFAULT '',
+                frequency_type TEXT NOT NULL
+                    CHECK(frequency_type IN ('DAILY','WEEKLY','MONTHLY')),
+                target_count INTEGER NOT NULL DEFAULT 1,
+                advice_text TEXT DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(list_id) REFERENCES task_lists(id) ON DELETE CASCADE,
+                FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE RESTRICT
+            );
 
-        if not filtered:
-            category_tasks_list.controls.append(ft.Container(content=ft.Text("لا توجد مهام.", color=ft.colors.GREY_600), padding=20, alignment=ft.alignment.center))
-        else:
-            for t in filtered:
-                task_url = t.get("link", "")
-                trailing_button = ft.IconButton(icon=ft.icons.LINK, icon_color=ft.colors.BLUE, on_click=lambda e, u=task_url: page.launch_url(u)) if task_url else None
-                task_card = ft.Card(
-                    color=ft.colors.WHITE, elevation=2,
-                    content=ft.ListTile(
-                        title=ft.Text(t["title"], weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900),
-                        subtitle=ft.Text("منجزة ✅" if t.get('completed') else "قيد الانتظار ⏳", color=ft.colors.GREEN if t.get('completed') else ft.colors.ORANGE),
-                        trailing=trailing_button,
-                    )
+            CREATE TABLE IF NOT EXISTS task_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                period_identifier TEXT NOT NULL,
+                completed_count INTEGER NOT NULL DEFAULT 0,
+                is_completed INTEGER NOT NULL DEFAULT 0,
+                last_updated TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(task_id, period_identifier),
+                FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS app_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tasks_period
+                ON tasks(frequency_type);
+
+            CREATE INDEX IF NOT EXISTS idx_tasks_category
+                ON tasks(category_id);
+
+            CREATE INDEX IF NOT EXISTS idx_logs_period
+                ON task_logs(period_identifier);
+            """
+        )
+
+        categories = [
+            ("مهام روحية", "auto_awesome", "#7E57C2"),
+            ("مهام بدنية وصحية", "fitness_center", "#43A047"),
+            ("مهام تطويرية", "rocket_launch", "#1E88E5"),
+            ("مهام تعليمية", "menu_book", "#FB8C00"),
+            ("مهام اجتماعية", "groups", "#00897B"),
+            ("مهام اقتصادية", "payments", "#F9A825"),
+        ]
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO categories(name, icon_name, color_code)
+            VALUES (?, ?, ?)
+            """,
+            categories,
+        )
+
+        lists = [
+            ("المهام اليومية", "DAILY"),
+            ("المهام الأسبوعية", "WEEKLY"),
+            ("المهام الشهرية", "MONTHLY"),
+        ]
+        for title, freq in lists:
+            conn.execute(
+                """
+                INSERT INTO task_lists(title, frequency_type)
+                SELECT ?, ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM task_lists WHERE frequency_type = ?
                 )
-                category_tasks_list.controls.append(task_card)
-        page.update()
-
-    def open_category_sheet(category_name, period_name):
-        current_context["category"] = category_name
-        current_context["period"] = period_name
-        refresh_category_tasks_view()
-        page.open(category_sheet)
-
-    # --- شاشة التقارير وتصدير النص ---
-    reports_content = ft.Column(spacing=15, scroll=ft.ScrollMode.AUTO, height=350)
-    
-    def export_text_report(e):
-        total = len(tasks_db)
-        done = sum(1 for t in tasks_db if t.get("completed", False))
-        report = f"📊 تقرير الإنجاز\nإجمالي المهام: {total}\nالمهام المنجزة: {done}\nالنقاط: {user_stats['points']}\n"
-        page.set_clipboard(report)
-        page.open(ft.SnackBar(content=ft.Text("تم نسخ التقرير!")))
-
-    reports_sheet = ft.BottomSheet(
-        content=ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Text("📊 تقرير الإنجاز", size=18, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900),
-                    ft.IconButton(icon=ft.icons.CLOSE, on_click=lambda e: page.close(reports_sheet)),
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Divider(),
-                reports_content,
-                ft.Row([ft.ElevatedButton("نسخ التقرير 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=export_text_report, expand=True)])
-            ]), padding=20, height=550, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
-        ), dismissible=True,
-    )
-
-    def open_reports_sheet(e):
-        reports_content.controls.clear()
-        total_tasks = len(tasks_db)
-        completed_tasks = sum(1 for t in tasks_db if t.get("completed", False))
-        ratio = (completed_tasks / total_tasks) if total_tasks > 0 else 0
-
-        kpi_row = ft.Row([
-            ft.Container(content=ft.Column([ft.Text("المهام"), ft.Text(str(total_tasks), size=20, weight=ft.FontWeight.BOLD)], horizontal_alignment=ft.CrossAxisAlignment.CENTER), bgcolor=ft.colors.BLUE_50, padding=10, border_radius=8, expand=True),
-            ft.Container(content=ft.Column([ft.Text("منجزة"), ft.Text(str(completed_tasks), size=20, weight=ft.FontWeight.BOLD, color=ft.colors.GREEN)], horizontal_alignment=ft.CrossAxisAlignment.CENTER), bgcolor=ft.colors.GREEN_50, padding=10, border_radius=8, expand=True),
-        ], spacing=10)
-
-        reports_content.controls.extend([
-            kpi_row,
-            ft.Row([ft.Text("التقدم العام", weight=ft.FontWeight.BOLD), ft.Text(f"{int(ratio*100)}%")], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.ProgressBar(value=ratio, color=ft.colors.GREEN, bgcolor=ft.colors.GREY_200, height=10)
-        ])
-        page.open(reports_sheet)
-
-    # --- القوائم والتبويبات ---
-    def build_vertical_menu(period_name):
-        menu_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, padding=15)
-        for cat_name, bg_col, text_col in categories:
-            menu_column.controls.append(
-                ft.Container(
-                    content=ft.Row([ft.Text(cat_name, size=16, weight=ft.FontWeight.BOLD, color=text_col), ft.Icon(ft.icons.ARROW_FORWARD_IOS, size=16, color=text_col)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    bgcolor=ft.colors.WHITE, padding=18, border_radius=10, 
-                    border=ft.border.all(1, ft.colors.BLUE_100), ink=True, 
-                    on_click=lambda e, c=cat_name, p=period_name: open_category_sheet(c, p),
-                )
+                """,
+                (title, freq, freq),
             )
-        return menu_column
 
-    tabs = ft.Tabs(
-        selected_index=0, expand=True,
-        label_color=ft.colors.BLUE_900, indicator_color=ft.colors.BLUE_700,
-        tabs=[
-            ft.Tab(text="يومية", icon=ft.icons.TODAY, content=build_vertical_menu("يومية")),
-            ft.Tab(text="أسبوعية", icon=ft.icons.DATE_RANGE, content=build_vertical_menu("أسبوعية")),
-            ft.Tab(text="شهرية", icon=ft.icons.CALENDAR_MONTH, content=build_vertical_menu("شهرية")),
-        ],
-    )
+        defaults = {
+            "points": "0",
+            "streak": "0",
+            "last_completion_date": "",
+            "theme_mode": "light",
+            "version": "2",
+        }
+        for key, value in defaults.items():
+            conn.execute(
+                "INSERT OR IGNORE INTO app_state(key, value) VALUES (?, ?)",
+                (key, value),
+            )
 
-    bottom_navigation_bar = ft.Container(
-        content=ft.Row([
-            ft.ElevatedButton("التقارير", icon=ft.icons.BAR_CHART, on_click=open_reports_sheet, style=ft.ButtonStyle(bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE), expand=True),
-        ], spacing=8),
-        padding=10, bgcolor=ft.colors.WHITE
-    )
+def get_state(key: str, default: str = "") -> str:
+    with connect_db() as conn:
+        row = conn.execute(
+            "SELECT value FROM app_state WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
 
-    # يتم إضافة العناصر الثلاثة للصفحة مباشرة لضمان أمان البناء الهندسي
-    page.add(motivation_header, tabs, bottom_navigation_bar)
+def set_state(key: str, value) -> None:
+    with connect_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO app_state(key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (key, str(value)),
+        )
 
-if __name__ == "__main__":
-    ft.app(target=main)
+def get_all_state() -> dict:
+    with connect_db() as conn:
+        rows = conn.execute("SELECT key, value FROM app_state").fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+def export_database(destination: str) -> None:
+    # ملاحظة: لتجنب خطأ PermissionError في أندرويد، يجب التأكد من أن 
+    # المتغير destination يمثل مساراً مصرحاً به (مثل مسار تم اختياره عبر FilePicker)
+    destination_path = Path(destination)
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    source = connect_db()
+    try:
+        target = sqlite3.connect(str(destination_path))
+        with target:
+            source.backup(target)
+        target.close()
+    finally:
+        source.close()
