@@ -10,16 +10,20 @@ def get_storage_path() -> Path:
     if base_dir:
         path = Path(base_dir)
     else:
-        # استخدام try-except لتجنب خطأ RuntimeError في أندرويد
         try:
+            # 1. محاولة استخدام المسار القياسي (يعمل بنجاح على الويندوز والكمبيوتر)
             path = Path.home() / f".{APP_DIR_NAME}"
-        except RuntimeError:
-            # في أندرويد، المسار الحالي (cwd) هو مسار التطبيق الآمن والمصرح بالكتابة فيه
-            path = Path(os.getcwd()) / f".{APP_DIR_NAME}"
+            path.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # 2. الحل الجذري لأندرويد: التوجيه إلى مجلد التطبيق المفتوح للصلاحيات
+            path = Path(__file__).parent / "database"
+            path.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # 3. خط دفاع أخير
+            path = Path(os.getcwd()) / "database"
+            path.mkdir(parents=True, exist_ok=True)
             
-    path.mkdir(parents=True, exist_ok=True)
     return path
-
 DB_NAME = str(get_storage_path() / DB_FILE_NAME)
 
 def connect_db():
