@@ -285,8 +285,9 @@ def main(page: ft.Page):
             ])
             page.open(reports_sheet)
 
-        def build_vertical_menu(period_name):
-            menu_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, padding=15)
+       def build_vertical_menu(period_name):
+            # تم إزالة padding=15 من العمود لتجنب الخطأ
+            menu_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO)
             for cat_name, bg_col, text_col in categories:
                 menu_column.controls.append(
                     ft.Container(
@@ -296,7 +297,8 @@ def main(page: ft.Page):
                         on_click=lambda e, c=cat_name, p=period_name: open_category_sheet(c, p),
                     )
                 )
-            return menu_column
+            # تم وضع العمود داخل حاوية لتعطيه الهوامش المطلوبة (15) بأمان
+            return ft.Container(content=menu_column, padding=15)
 
         tabs = ft.Tabs(
             selected_index=0, expand=True,
