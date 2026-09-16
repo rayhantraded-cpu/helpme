@@ -1,61 +1,18 @@
 import os
-import sqlite3
 import json
 import datetime
 import random
 import traceback
-from pathlib import Path
 import flet as ft
 
 # ==========================================
-# 1. محرك قاعدة البيانات (SQLite) المخصص لأندرويد
+# 1. نظام التخزين المتوافق مع أندرويد (Client Storage)
 # ==========================================
-APP_DIR_NAME = "personal_productivity_app"
-DB_FILE_NAME = "personal_assistant.db"
-
-def get_storage_path() -> Path:
-    cwd = Path(os.getcwd())
-    app_dir = cwd / APP_DIR_NAME
-    try:
-        app_dir.mkdir(parents=True, exist_ok=True)
-        return app_dir
-    except Exception:
-        return cwd
-
-DB_NAME = str(get_storage_path() / DB_FILE_NAME)
-
-def connect_db():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode = DELETE")
-    return conn
-
-def init_db():
-    with connect_db() as conn:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS app_state (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-        """)
-
-def get_state(key: str, default: str = "") -> str:
-    try:
-        with connect_db() as conn:
-            row = conn.execute("SELECT value FROM app_state WHERE key = ?", (key,)).fetchone()
-            return row["value"] if row else default
-    except Exception:
-        return default
-
-def set_state(key: str, value: str) -> None:
-    with connect_db() as conn:
-        conn.execute("""
-            INSERT INTO app_state(key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        """, (key, str(value)))
+# تم الاستغناء عن SQLite واستخدام page.client_storage المدعوم رسمياً لأندرويد
+# لضمان حفظ واسترجاع البيانات (JSON) بدون مشاكل الصلاحيات والمسارات.
 
 # ==========================================
-# 2. الواجهة الكاملة مع نظام كشف الأخطاء
+# 2. الواجهة الكاملة
 # ==========================================
 MORNING_MESSAGES = ["🌅 بركة يومك في بكورك! ابدأ بمهمة واحدة الآن.", "☀️ صباح الهمة! انطلاقة جديدة ليوم مليء بالإنجاز."]
 AFTERNOON_MESSAGES = ["🌤️ جاء وقت العصر! خطوة صغيرة إضافية تصنع الفارق.", "☕ حان وقت الاستراحة وشحن الطاقة."]
@@ -79,23 +36,20 @@ def main(page: ft.Page):
     page.spacing = 0
 
     try:
-        # 1. تشغيل قاعدة البيانات
-        init_db()
-
-        # 2. استرجاع البيانات
-        saved_stats = get_state("user_stats")
+        # 1. استرجاع البيانات باستخدام التخزين الآمن
+        saved_stats = page.client_storage.get("user_stats")
         user_stats = json.loads(saved_stats) if saved_stats else {"streak": 1, "points": 0}
         
-        saved_tasks = get_state("tasks_db")
+        saved_tasks = page.client_storage.get("tasks_db")
         tasks_db = json.loads(saved_tasks) if saved_tasks else []
 
         def save_data():
-            set_state("user_stats", json.dumps(user_stats))
-            set_state("tasks_db", json.dumps(tasks_db))
+            page.client_storage.set("user_stats", json.dumps(user_stats))
+            page.client_storage.set("tasks_db", json.dumps(tasks_db))
 
         current_context = {"category": "", "period": "يومية"}
 
-        # 3. بناء عناصر الواجهة
+        # 2. بناء عناصر الواجهة
         streak_text = ft.Text(f"{user_stats['streak']} أيام", weight=ft.FontWeight.BOLD, size=12)
         points_text = ft.Text(f"{user_stats['points']} نقطة", weight=ft.FontWeight.BOLD, size=12)
 
@@ -107,12 +61,19 @@ def main(page: ft.Page):
 
         banner_tip = ft.Text(get_time_based_message(), size=12, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900, expand=True)
 
+        # تمت إضافة زري الإعدادات والإغلاق هنا
         motivation_header = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.IconButton(icon=ft.icons.MENU, on_click=lambda e: (update_drawer_achievements(), page.open(drawer))),
-                    ft.Container(content=ft.Row([ft.Icon(ft.icons.LOCAL_FIRE_DEPARTMENT, color=ft.colors.ORANGE, size=18), streak_text]), bgcolor=ft.colors.ORANGE_50, padding=5, border_radius=15),
-                    ft.Container(content=ft.Row([ft.Icon(ft.icons.STAR, color=ft.colors.AMBER_800, size=18), points_text]), bgcolor=ft.colors.AMBER_50, padding=5, border_radius=15),
+                    ft.Row([
+                        ft.IconButton(icon=ft.icons.MENU, on_click=lambda e: (update_drawer_achievements(), page.open(drawer))),
+                        ft.IconButton(icon=ft.icons.SETTINGS, icon_color=ft.colors.BLUE_900, tooltip="الإعدادات"),
+                    ]),
+                    ft.Row([
+                        ft.Container(content=ft.Row([ft.Icon(ft.icons.LOCAL_FIRE_DEPARTMENT, color=ft.colors.ORANGE, size=18), streak_text]), bgcolor=ft.colors.ORANGE_50, padding=5, border_radius=15),
+                        ft.Container(content=ft.Row([ft.Icon(ft.icons.STAR, color=ft.colors.AMBER_800, size=18), points_text]), bgcolor=ft.colors.AMBER_50, padding=5, border_radius=15),
+                        ft.IconButton(icon=ft.icons.CLOSE, icon_color=ft.colors.RED_700, tooltip="إغلاق التطبيق", on_click=lambda e: page.window_close()),
+                    ], spacing=5),
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Row([ft.Icon(ft.icons.LIGHTBULB_OUTLINE, color=ft.colors.AMBER_700, size=18), banner_tip]),
             ]),
@@ -200,8 +161,10 @@ def main(page: ft.Page):
             ],
         )
 
-        category_tasks_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, height=320) 
+        # تمت إزالة الارتفاع الثابت لجعل القائمة تتمدد بشكل طبيعي
+        category_tasks_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO) 
 
+        # تمت إضافة نص التوجيه وحماية الزر باستخدام SafeArea
         category_sheet = ft.BottomSheet(
             content=ft.Container(
                 content=ft.Column([
@@ -210,16 +173,21 @@ def main(page: ft.Page):
                         ft.IconButton(icon=ft.icons.CLOSE, on_click=lambda e: page.close(category_sheet)),
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     ft.Divider(),
-                    category_tasks_list, 
-                    ft.Row([ft.ElevatedButton("إضافة مهمة جديدة (+)", icon=ft.icons.ADD, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=lambda e: page.open(add_task_dialog), expand=True)])
-                ]), padding=20, height=520, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
+                    ft.Text(get_time_based_message(), size=13, color=ft.colors.BLUE_700, text_align=ft.TextAlign.CENTER), # رسالة التوجيه
+                    ft.Container(content=category_tasks_list, expand=True), # تمدد ديناميكي لتفادي القص
+                    ft.SafeArea( # لضمان ظهور زر الإضافة فوق أزرار نظام الأندرويد السفلية
+                        ft.Row([
+                            ft.ElevatedButton("إضافة مهمة جديدة (+)", icon=ft.icons.ADD, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=lambda e: page.open(add_task_dialog), expand=True)
+                        ])
+                    )
+                ]), padding=20, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
             ), dismissible=True,
         )
 
         def refresh_category_tasks_view():
             category_tasks_list.controls.clear()
             cat, per = current_context["category"], current_context["period"]
-            filtered = [t for t in tasks_db if t["category"] == cat and t["period"] == per]
+            filtered = [t for t in tasks_db if t.get("category") == cat and t.get("period") == per]
 
             if not filtered:
                 category_tasks_list.controls.append(ft.Container(content=ft.Text("لا توجد مهام.", color=ft.colors.GREY_600), padding=20, alignment=ft.alignment.center))
@@ -244,7 +212,7 @@ def main(page: ft.Page):
             refresh_category_tasks_view()
             page.open(category_sheet)
 
-        reports_content = ft.Column(spacing=15, scroll=ft.ScrollMode.AUTO, height=350)
+        reports_content = ft.Column(spacing=15, scroll=ft.ScrollMode.AUTO, expand=True)
         
         def export_text_report(e):
             total = len(tasks_db)
@@ -261,9 +229,11 @@ def main(page: ft.Page):
                         ft.IconButton(icon=ft.icons.CLOSE, on_click=lambda e: page.close(reports_sheet)),
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     ft.Divider(),
-                    reports_content,
-                    ft.Row([ft.ElevatedButton("نسخ التقرير 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=export_text_report, expand=True)])
-                ]), padding=20, height=550, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
+                    ft.Container(content=reports_content, expand=True),
+                    ft.SafeArea(
+                        ft.Row([ft.ElevatedButton("نسخ التقرير 📄", icon=ft.icons.COPY, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, on_click=export_text_report, expand=True)])
+                    )
+                ]), padding=20, bgcolor=ft.colors.WHITE, border_radius=ft.border_radius.only(top_left=20, top_right=20)
             ), dismissible=True,
         )
 
@@ -284,9 +254,9 @@ def main(page: ft.Page):
                 ft.ProgressBar(value=ratio, color=ft.colors.GREEN, bgcolor=ft.colors.GREY_200, height=10)
             ])
             page.open(reports_sheet)
+            page.update() # تم إضافة التحديث الإجباري لضمان ظهور النسبة المئوية فوراً
 
         def build_vertical_menu(period_name):
-            # الكود المعدل والخالي من خطأ padding
             menu_column = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO)
             for cat_name, bg_col, text_col in categories:
                 menu_column.controls.append(
@@ -297,7 +267,6 @@ def main(page: ft.Page):
                         on_click=lambda e, c=cat_name, p=period_name: open_category_sheet(c, p),
                     )
                 )
-            # تم نقل الـ padding للحاوية (Container) لتعمل بشكل آمن
             return ft.Container(content=menu_column, padding=15)
 
         tabs = ft.Tabs(
@@ -311,17 +280,18 @@ def main(page: ft.Page):
         )
 
         bottom_navigation_bar = ft.Container(
-            content=ft.Row([
-                ft.ElevatedButton("التقارير", icon=ft.icons.BAR_CHART, on_click=open_reports_sheet, style=ft.ButtonStyle(bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE), expand=True),
-            ], spacing=8),
+            content=ft.SafeArea(
+                ft.Row([
+                    ft.ElevatedButton("التقارير", icon=ft.icons.BAR_CHART, on_click=open_reports_sheet, style=ft.ButtonStyle(bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE), expand=True),
+                ], spacing=8)
+            ),
             padding=10, bgcolor=ft.colors.WHITE
         )
 
-        # 4. تجميع وإضافة الواجهة
+        # 3. تجميع وإضافة الواجهة
         page.add(motivation_header, tabs, bottom_navigation_bar)
 
     except Exception as e:
-        # إذا حدث أي خطأ، ستظهر هذه الشاشة الحمراء ولن تغلق الشاشة في وجهك
         error_details = traceback.format_exc()
         page.add(
             ft.Container(
