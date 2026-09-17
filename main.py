@@ -177,12 +177,13 @@ def main(page: ft.Page):
         )
 
         # ---------------------------------------------------------
-        # شاشة الإضافة والتعديل
+        # شاشة الإضافة والتعديل (مع التوزيع المرن للحقول)
         # ---------------------------------------------------------
-        task_title_input = ft.TextField(label="نص المهمة", width=300)
-        task_link_input = ft.TextField(label="الرابط (اختياري)", width=300)
-        task_target_count_input = ft.TextField(label="العدد", value="1", keyboard_type=ft.KeyboardType.NUMBER, width=145)
-        task_period_dropdown = ft.Dropdown(label="التكرار", value="يومية", options=[ft.dropdown.Option("يومية"), ft.dropdown.Option("أسبوعية"), ft.dropdown.Option("شهرية")], width=145)
+        task_title_input = ft.TextField(label="نص المهمة")
+        task_link_input = ft.TextField(label="الرابط (اختياري)")
+        # استخدام expand لتوزيع المساحة بذكاء ومنع خروج الحقول من الشاشة
+        task_target_count_input = ft.TextField(label="العدد", value="1", keyboard_type=ft.KeyboardType.NUMBER, expand=1)
+        task_period_dropdown = ft.Dropdown(label="التكرار", value="يومية", options=[ft.dropdown.Option("يومية"), ft.dropdown.Option("أسبوعية"), ft.dropdown.Option("شهرية")], expand=2)
 
         def open_add_edit_dialog(task=None):
             if task:
@@ -253,7 +254,7 @@ def main(page: ft.Page):
         )
 
         # ---------------------------------------------------------
-        # شاشة المهام التفصيلية
+        # شاشة المهام التفصيلية (مع الترقيم المدمج وإزالة زر التعديل)
         # ---------------------------------------------------------
         category_tasks_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO) 
         category_tip_text = ft.Text("", size=11, color=ft.colors.BLUE_700, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER, expand=True)
@@ -288,18 +289,21 @@ def main(page: ft.Page):
             else:
                 for index, t in enumerate(cat_tasks, 1): 
                     task_url = t.get("link", "")
-                    link_btn = ft.IconButton(icon=ft.icons.LINK, icon_color=ft.colors.BLUE, on_click=lambda e, u=task_url: page.launch_url(u)) if task_url else ft.Container()
-                    edit_btn = ft.IconButton(icon=ft.icons.EDIT, icon_color=ft.colors.GREY_600, on_click=lambda e, task=t: open_add_edit_dialog(task))
+                    # إبقاء الرابط فقط إذا وجد، وإزالة زر التعديل (القلم)
+                    trailing_btn = ft.IconButton(icon=ft.icons.LINK, icon_color=ft.colors.BLUE, on_click=lambda e, u=task_url: page.launch_url(u)) if task_url else None
                     
                     status = "✅" if t.get("current_count",0) >= t.get("target_count",1) else "⏳"
                     
                     task_card = ft.Card(
                         color=ft.colors.WHITE, elevation=1,
                         content=ft.ListTile(
-                            leading=ft.Text(f"{index}-", weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900, size=16),
-                            title=ft.Text(t['title'], weight=ft.FontWeight.BOLD),
+                            # دمج الرقم مع العنوان في ft.Row لإجباره على الظهور في اليمين بشكل متناسق
+                            title=ft.Row([
+                                ft.Text(f"{index}-", weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900, size=16),
+                                ft.Text(t['title'], weight=ft.FontWeight.BOLD, expand=True)
+                            ]),
                             subtitle=ft.Text(f"مطلوب: {t.get('target_count',1)} مرات {status}", size=11, color=ft.colors.GREY_600),
-                            trailing=ft.Row([link_btn, edit_btn], spacing=0, tight=True),
+                            trailing=trailing_btn,
                             on_click=lambda e, task=t: open_add_edit_dialog(task) 
                         )
                     )
@@ -309,6 +313,7 @@ def main(page: ft.Page):
         def open_category_sheet(category_name, period_name):
             current_context["category"] = category_name
             current_context["period"] = period_name
+            # النصيحة تتغير مع كل فتح للشاشة (وهذا الأفضل تجريبياً)
             tips_list = CATEGORY_TIPS.get(category_name, ["💡 توكل على الله وابدأ."])
             category_tip_text.value = random.choice(tips_list)
             
@@ -418,7 +423,7 @@ def main(page: ft.Page):
         )
 
         # ---------------------------------------------------------
-        # شريط الأزرار السفلي المصحح
+        # شريط الأزرار السفلي 
         # ---------------------------------------------------------
         nav_btn_style = ft.ButtonStyle(
             padding=ft.padding.symmetric(horizontal=2, vertical=10)
