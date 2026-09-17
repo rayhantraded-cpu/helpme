@@ -43,7 +43,7 @@ def main(page: ft.Page):
             page.client_storage.set("tasks_db", json.dumps(tasks_db))
 
         current_context = {"category": "", "period": "يومية"}
-        editing_task_id = [None] # متغير لتتبع ما إذا كنا في وضع الإضافة أو التعديل
+        editing_task_id = [None] 
 
         def update_task_states():
             now = datetime.datetime.now()
@@ -113,7 +113,7 @@ def main(page: ft.Page):
         )
 
         # ---------------------------------------------------------
-        # قائمة الإنجازات (الدرج الجانبي) - هنا يتم التأشير على المهام
+        # قائمة الإنجازات (الدرج الجانبي)
         # ---------------------------------------------------------
         achievements_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
 
@@ -138,19 +138,18 @@ def main(page: ft.Page):
             
             points_text.value = f"{user_stats['points']} نقطة"
             save_data()
-            update_drawer_achievements() # تحديث القائمة الجانبية لإخفاء المهمة المنجزة
+            update_drawer_achievements() 
 
         def update_drawer_achievements():
             update_task_states()
             achievements_list.controls.clear()
             now = datetime.datetime.now()
             
-            # جلب المهام غير المكتملة والتي ليس عليها حظر زمني
             pending_tasks = []
             for t in tasks_db:
                 if t.get("current_count", 0) < t.get("target_count", 1):
                     if t.get("next_show") and now < datetime.datetime.fromisoformat(t["next_show"]):
-                        continue # تأجيل
+                        continue 
                     pending_tasks.append(t)
 
             if not pending_tasks:
@@ -178,7 +177,7 @@ def main(page: ft.Page):
         )
 
         # ---------------------------------------------------------
-        # شاشة الإضافة والتعديل (بدون تمدد مزعج)
+        # شاشة الإضافة والتعديل
         # ---------------------------------------------------------
         task_title_input = ft.TextField(label="نص المهمة", width=300)
         task_link_input = ft.TextField(label="الرابط (اختياري)", width=300)
@@ -211,7 +210,7 @@ def main(page: ft.Page):
             except ValueError:
                 t_count = 1
                 
-            if editing_task_id[0]: # حالة التعديل
+            if editing_task_id[0]: 
                 for t in tasks_db:
                     if t["id"] == editing_task_id[0]:
                         t["title"] = task_title_input.value
@@ -220,7 +219,7 @@ def main(page: ft.Page):
                         t["target_count"] = t_count
                         break
                 msg = "تم تعديل المهمة بنجاح!"
-            else: # حالة الإضافة
+            else: 
                 tasks_db.append({
                     "id": str(random.randint(10000, 99999)),
                     "title": task_title_input.value, 
@@ -246,7 +245,7 @@ def main(page: ft.Page):
                 task_title_input, 
                 task_link_input, 
                 ft.Row([task_target_count_input, task_period_dropdown], spacing=10)
-            ], tight=True), # tight=True تمنع التمدد المزعج
+            ], tight=True), 
             actions=[
                 ft.TextButton("إلغاء", on_click=lambda e: page.close(add_task_dialog)),
                 ft.ElevatedButton("حفظ", on_click=save_task, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE),
@@ -254,7 +253,7 @@ def main(page: ft.Page):
         )
 
         # ---------------------------------------------------------
-        # شاشة المهام التفصيلية (مرقمة + مقترحات في الشريط)
+        # شاشة المهام التفصيلية
         # ---------------------------------------------------------
         category_tasks_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO) 
         category_tip_text = ft.Text("", size=11, color=ft.colors.BLUE_700, weight=ft.FontWeight.W_600, text_align=ft.TextAlign.CENTER, expand=True)
@@ -262,7 +261,6 @@ def main(page: ft.Page):
         category_sheet = ft.BottomSheet(
             content=ft.Container(
                 content=ft.Column([
-                    # التوجيهات أصبحت في الوسط بين المهام وزر الإغلاق
                     ft.Row([
                         ft.Text("المهام", size=16, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_900),
                         category_tip_text,
@@ -283,13 +281,12 @@ def main(page: ft.Page):
             category_tasks_list.controls.clear()
             cat, per = current_context["category"], current_context["period"]
             
-            # جلب كل المهام المتعلقة بهذا القسم وهذه الفترة (بدون إخفاء المنجز)
             cat_tasks = [t for t in tasks_db if t["category"] == cat and t["period"] == per]
 
             if not cat_tasks:
                 category_tasks_list.controls.append(ft.Container(content=ft.Text("لا توجد مهام مدرجة هنا بعد.", color=ft.colors.GREY_600), padding=20, alignment=ft.alignment.center))
             else:
-                for index, t in enumerate(cat_tasks, 1): # ترقيم المهام 1, 2, 3
+                for index, t in enumerate(cat_tasks, 1): 
                     task_url = t.get("link", "")
                     link_btn = ft.IconButton(icon=ft.icons.LINK, icon_color=ft.colors.BLUE, on_click=lambda e, u=task_url: page.launch_url(u)) if task_url else ft.Container()
                     edit_btn = ft.IconButton(icon=ft.icons.EDIT, icon_color=ft.colors.GREY_600, on_click=lambda e, task=t: open_add_edit_dialog(task))
@@ -303,7 +300,7 @@ def main(page: ft.Page):
                             title=ft.Text(t['title'], weight=ft.FontWeight.BOLD),
                             subtitle=ft.Text(f"مطلوب: {t.get('target_count',1)} مرات {status}", size=11, color=ft.colors.GREY_600),
                             trailing=ft.Row([link_btn, edit_btn], spacing=0, tight=True),
-                            on_click=lambda e, task=t: open_add_edit_dialog(task) # يفتح التعديل عند الضغط على المهمة
+                            on_click=lambda e, task=t: open_add_edit_dialog(task) 
                         )
                     )
                     category_tasks_list.controls.append(task_card)
@@ -421,26 +418,36 @@ def main(page: ft.Page):
         )
 
         # ---------------------------------------------------------
-        # شريط الأزرار السفلي (حجم أصغر، وإغلاق حقيقي)
+        # شريط الأزرار السفلي المصحح
         # ---------------------------------------------------------
-        # تصغير الخط والهوامش لمنع التداخل والنزول لسطر جديد
         nav_btn_style = ft.ButtonStyle(
-            padding=ft.padding.symmetric(horizontal=2, vertical=10),
-            text_style=ft.TextStyle(size=11, weight=ft.FontWeight.BOLD)
+            padding=ft.padding.symmetric(horizontal=2, vertical=10)
         )
         
         def close_app(e):
             try:
-                page.window.close() # الطريقة المعتمدة لإنهاء التطبيق في الإصدارات الحديثة
+                page.window_close()
             except Exception:
-                pass
+                try:
+                    page.window.close()
+                except Exception:
+                    pass
 
         bottom_navigation_bar = ft.Container(
             content=ft.SafeArea(
                 ft.Row([
-                    ft.ElevatedButton("التقارير", icon=ft.icons.BAR_CHART, on_click=open_reports_sheet, style=nav_btn_style, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, expand=True),
-                    ft.ElevatedButton("إغلاق", icon=ft.icons.CLOSE, on_click=close_app, style=nav_btn_style, bgcolor=ft.colors.RED_700, color=ft.colors.WHITE, expand=True),
-                    ft.ElevatedButton("الإعدادات", icon=ft.icons.SETTINGS, on_click=lambda e: page.open(settings_sheet), style=nav_btn_style, bgcolor=ft.colors.GREY_700, color=ft.colors.WHITE, expand=True),
+                    ft.ElevatedButton(
+                        content=ft.Row([ft.Icon(ft.icons.BAR_CHART, size=16), ft.Text("التقارير", size=11, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                        on_click=open_reports_sheet, style=nav_btn_style, bgcolor=ft.colors.BLUE_700, color=ft.colors.WHITE, expand=True
+                    ),
+                    ft.ElevatedButton(
+                        content=ft.Row([ft.Icon(ft.icons.CLOSE, size=16), ft.Text("إغلاق", size=11, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                        on_click=close_app, style=nav_btn_style, bgcolor=ft.colors.RED_700, color=ft.colors.WHITE, expand=True
+                    ),
+                    ft.ElevatedButton(
+                        content=ft.Row([ft.Icon(ft.icons.SETTINGS, size=16), ft.Text("الإعدادات", size=11, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                        on_click=lambda e: page.open(settings_sheet), style=nav_btn_style, bgcolor=ft.colors.GREY_700, color=ft.colors.WHITE, expand=True
+                    ),
                 ], spacing=6)
             ),
             padding=10, bgcolor=ft.colors.WHITE
